@@ -46,7 +46,7 @@ func main() {
 
 	// 5. Start server
 	port := cfg.Port
-	log.Printf("🚀 Server running on port %s", port)
+	log.Printf("Server running on port %s", port)
 	log.Fatal(http.ListenAndServe(":"+port, handler))
 }
 
@@ -77,7 +77,7 @@ func productByIDHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // GET /products - Get all products
-func getAllProducts(w http.ResponseWriter, r *http.Request) {
+func getAllProducts(w http.ResponseWriter, _ *http.Request) {
 	query := repository.BuildSelectQuery("products",
 		[]string{"id", "name", "description", "price", "stock"}, "")
 
