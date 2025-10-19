@@ -110,3 +110,9 @@ cd examples/03-crud-api && go run main.go
 ## License
 
 MIT
+
+## Developer & Contributors
+
+
+**Name:** Aisiya Qutwatunnada  
+**GitHub:** @Yoochan45  
