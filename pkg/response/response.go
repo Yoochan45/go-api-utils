@@ -1,24 +1,28 @@
 package response
 
 import (
-	"encoding/json"
-	"net/http"
+    "encoding/json"
+    "log"
+    "net/http"
 )
 
 // Response represents standard API response structure
 type Response struct {
-	Success bool        `json:"success"`
-	Message string      `json:"message"`
-	Data    interface{} `json:"data,omitempty"`
-	Error   string      `json:"error,omitempty"`
+    Success bool        `json:"success"`
+    Message string      `json:"message"`
+    Data    interface{} `json:"data,omitempty"`
+    Error   string      `json:"error,omitempty"`
 }
 
-// writeJSON writes JSON response and logs encode error server-side
+// writeJSON writes JSON response and logs encode error server-side.
+// It ensures Content-Type and status are set before encoding, and logs
+// any encoding failure for server-side debugging without exposing details
+// to clients.
 func writeJSON(w http.ResponseWriter, status int, v interface{}) {
     w.Header().Set("Content-Type", "application/json")
     w.WriteHeader(status)
     if err := json.NewEncoder(w).Encode(v); err != nil {
-        // log encode error for server-side debugging; do NOT expose details to client
+        // Log encode error for server-side debugging; do NOT expose details to client
         log.Printf("response encode error: %v", err)
     }
 }
@@ -29,13 +33,11 @@ func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 //
 //	response.Success(w, "Data retrieved", products)
 func Success(w http.ResponseWriter, message string, data interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(Response{
-		Success: true,
-		Message: message,
-		Data:    data,
-	})
+    writeJSON(w, http.StatusOK, Response{
+        Success: true,
+        Message: message,
+        Data:    data,
+    })
 }
 
 // Created sends a resource created response (201 Created)
@@ -44,13 +46,11 @@ func Success(w http.ResponseWriter, message string, data interface{}) {
 //
 //	response.Created(w, "Product created", product)
 func Created(w http.ResponseWriter, message string, data interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(Response{
-		Success: true,
-		Message: message,
-		Data:    data,
-	})
+    writeJSON(w, http.StatusCreated, Response{
+        Success: true,
+        Message: message,
+        Data:    data,
+    })
 }
 
 // NoContent sends a no content response (204 No Content)
@@ -59,7 +59,7 @@ func Created(w http.ResponseWriter, message string, data interface{}) {
 //
 //	response.NoContent(w)
 func NoContent(w http.ResponseWriter) {
-	w.WriteHeader(http.StatusNoContent)
+    w.WriteHeader(http.StatusNoContent)
 }
 
 // Error sends an error response with custom status code
@@ -68,12 +68,10 @@ func NoContent(w http.ResponseWriter) {
 //
 //	response.Error(w, http.StatusInternalServerError, "Database error")
 func Error(w http.ResponseWriter, statusCode int, message string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(statusCode)
-	json.NewEncoder(w).Encode(Response{
-		Success: false,
-		Error:   message,
-	})
+    writeJSON(w, statusCode, Response{
+        Success: false,
+        Error:   message,
+    })
 }
 
 // BadRequest sends a bad request error (400 Bad Request)
@@ -82,7 +80,7 @@ func Error(w http.ResponseWriter, statusCode int, message string) {
 //
 //	response.BadRequest(w, "Invalid product ID")
 func BadRequest(w http.ResponseWriter, message string) {
-	Error(w, http.StatusBadRequest, message)
+    Error(w, http.StatusBadRequest, message)
 }
 
 // NotFound sends a not found error (404 Not Found)
@@ -91,7 +89,7 @@ func BadRequest(w http.ResponseWriter, message string) {
 //
 //	response.NotFound(w, "Product not found")
 func NotFound(w http.ResponseWriter, message string) {
-	Error(w, http.StatusNotFound, message)
+    Error(w, http.StatusNotFound, message)
 }
 
 // Unauthorized sends an unauthorized error (401 Unauthorized)
@@ -100,7 +98,7 @@ func NotFound(w http.ResponseWriter, message string) {
 //
 //	response.Unauthorized(w, "Invalid credentials")
 func Unauthorized(w http.ResponseWriter, message string) {
-	Error(w, http.StatusUnauthorized, message)
+    Error(w, http.StatusUnauthorized, message)
 }
 
 // Forbidden sends a forbidden error (403 Forbidden)
@@ -109,7 +107,7 @@ func Unauthorized(w http.ResponseWriter, message string) {
 //
 //	response.Forbidden(w, "Access denied")
 func Forbidden(w http.ResponseWriter, message string) {
-	Error(w, http.StatusForbidden, message)
+    Error(w, http.StatusForbidden, message)
 }
 
 // InternalServerError sends internal server error (500 Internal Server Error)
@@ -118,5 +116,5 @@ func Forbidden(w http.ResponseWriter, message string) {
 //
 //	response.InternalServerError(w, "Something went wrong")
 func InternalServerError(w http.ResponseWriter, message string) {
-	Error(w, http.StatusInternalServerError, message)
+    Error(w, http.StatusInternalServerError, message)
 }
