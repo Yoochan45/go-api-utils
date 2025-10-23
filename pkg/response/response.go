@@ -13,6 +13,16 @@ type Response struct {
 	Error   string      `json:"error,omitempty"`
 }
 
+// writeJSON writes JSON response and logs encode error server-side
+func writeJSON(w http.ResponseWriter, status int, v interface{}) {
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(status)
+    if err := json.NewEncoder(w).Encode(v); err != nil {
+        // log encode error for server-side debugging; do NOT expose details to client
+        log.Printf("response encode error: %v", err)
+    }
+}
+
 // Success sends a successful JSON response (200 OK)
 // Use this for GET requests and successful operations
 // Example:
