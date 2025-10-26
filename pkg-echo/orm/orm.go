@@ -3,6 +3,7 @@ package orm
 import (
 	"fmt"
 	"log"
+	"os"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -35,4 +36,39 @@ func AutoMigrate(db *gorm.DB, models ...interface{}) error {
 	}
 	log.Println("auto migration completed")
 	return nil
+}
+
+// Init initializes GORM connection from a database URL while respecting SKIP_DB
+// If SKIP_DB=1, returns (nil, nil). If databaseURL is empty it will try SUPABASE_URL or DATABASE_URL env.
+func Init(databaseURL string) (*gorm.DB, error) {
+    // respect SKIP_DB
+    if os.Getenv("SKIP_DB") == "1" {
+        log.Println("SKIP_DB=1 set, skipping DB initialization")
+        return nil, nil
+    }
+
+    // fallback envs
+    if databaseURL == "" {
+        if sup := os.Getenv("SUPABASE_URL"); sup != "" {
+            databaseURL = sup
+            log.Println("Init: using SUPABASE_URL")
+        } else if d := os.Getenv("DATABASE_URL"); d != "" {
+            databaseURL = d
+            log.Println("Init: using DATABASE_URL from environment")
+        }
+    }
+
+    if databaseURL == "" {
+        return nil, fmt.Errorf("no database URL provided")
+    }
+
+    db, err := gorm.Open(postgres.Open(databaseURL), &gorm.Config{
+        Logger: logger.Default.LogMode(logger.Info),
+    })
+    if err != nil {
+        return nil, fmt.Errorf("failed to connect to database: %w", err)
+    }
+
+    log.Println("GORM connected to PostgreSQL (Init)")
+    return db, nil
 }
