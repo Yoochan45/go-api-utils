@@ -35,3 +35,62 @@ func ValidateEmail(c echo.Context, email string) bool {
 	}
 	return true
 }
+
+// GetInt safely converts interface{} to int from token data
+// Returns 0 if key not found or conversion fails
+// Use this when getting numeric fields from custom token
+// Example:
+//
+//	data := middleware.GetTokenData(c)
+//	userID := request.GetInt(data, "user_id")
+func GetInt(data map[string]interface{}, key string) int {
+	if data == nil {
+		return 0
+	}
+	if val, ok := data[key].(float64); ok {
+		return int(val)
+	}
+	if val, ok := data[key].(int); ok {
+		return val
+	}
+	return 0
+}
+
+// GetString safely converts interface{} to string from token data
+// Returns empty string if key not found or conversion fails
+// Example:
+//
+//	email := request.GetString(data, "email")
+func GetString(data map[string]interface{}, key string) string {
+	if data == nil {
+		return ""
+	}
+	if val, ok := data[key].(string); ok {
+		return val
+	}
+	return ""
+}
+
+// GetBool safely converts interface{} to bool from token data
+// Returns false if key not found or conversion fails
+func GetBool(data map[string]interface{}, key string) bool {
+	if data == nil {
+		return false
+	}
+	if val, ok := data[key].(bool); ok {
+		return val
+	}
+	return false
+}
+
+// GetFloat safely converts interface{} to float64 from token data
+// Returns 0.0 if key not found or conversion fails
+func GetFloat(data map[string]interface{}, key string) float64 {
+	if data == nil {
+		return 0.0
+	}
+	if val, ok := data[key].(float64); ok {
+		return val
+	}
+	return 0.0
+}

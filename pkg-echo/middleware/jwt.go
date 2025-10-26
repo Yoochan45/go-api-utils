@@ -10,8 +10,9 @@ import (
 
 // JWTConfig holds JWT middleware configuration
 type JWTConfig struct {
-	SecretKey   string
-	SkipperFunc func(c echo.Context) bool // optional: skip auth for certain routes
+	SecretKey      string
+	SkipperFunc    func(c echo.Context) bool // optional: skip auth for certain routes
+	UseCustomToken bool                      // use custom token validation
 }
 
 // JWTMiddleware validates JWT token from Authorization header
@@ -52,19 +53,42 @@ func JWTMiddleware(config JWTConfig) echo.MiddlewareFunc {
 
 			tokenString := parts[1]
 
-			// validate token
-			claims, err := auth.ValidateToken(tokenString, config.SecretKey)
-			if err != nil {
-				return c.JSON(http.StatusUnauthorized, map[string]string{
-					"error": "invalid or expired token",
-				})
-			}
+			// validate token (custom or standard)
+			if config.UseCustomToken {
+				data, err := auth.ValidateCustomToken(tokenString, config.SecretKey)
+				if err != nil {
+					return c.JSON(http.StatusUnauthorized, map[string]string{
+						"error": "invalid or expired token",
+					})
+				}
 
-			// store claims in context for handler access
-			c.Set("user_id", claims.UserID)
-			c.Set("email", claims.Email)
-			c.Set("role", claims.Role)
-			c.Set("claims", claims)
+				// store all custom data in context
+				c.Set("token_data", data)
+
+				// also set common fields if they exist
+				if userID, ok := data["user_id"].(float64); ok {
+					c.Set("user_id", int(userID))
+				}
+				if email, ok := data["email"].(string); ok {
+					c.Set("email", email)
+				}
+				if role, ok := data["role"].(string); ok {
+					c.Set("role", role)
+				}
+			} else {
+				claims, err := auth.ValidateToken(tokenString, config.SecretKey)
+				if err != nil {
+					return c.JSON(http.StatusUnauthorized, map[string]string{
+						"error": "invalid or expired token",
+					})
+				}
+
+				// store claims in context for handler access
+				c.Set("user_id", claims.UserID)
+				c.Set("email", claims.Email)
+				c.Set("role", claims.Role)
+				c.Set("claims", claims)
+			}
 
 			return next(c)
 		}
@@ -103,6 +127,19 @@ func GetUserRole(c echo.Context) string {
 func GetClaims(c echo.Context) *auth.Claims {
 	if claims, ok := c.Get("claims").(*auth.Claims); ok {
 		return claims
+	}
+	return nil
+}
+
+// GetTokenData retrieves custom token data from Echo context
+// Use this when using custom tokens
+// Example:
+//
+//	data := middleware.GetTokenData(c)
+//	firstName := data["first_name"].(string)
+func GetTokenData(c echo.Context) map[string]interface{} {
+	if data, ok := c.Get("token_data").(map[string]interface{}); ok {
+		return data
 	}
 	return nil
 }
