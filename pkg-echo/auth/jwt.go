@@ -84,8 +84,13 @@ func ValidateToken(tokenString, secretKey string) (*Claims, error) {
 		return []byte(secretKey), nil
 	})
 
+	// Map parsing errors to domain errors
 	if err != nil {
-		return nil, err
+		// jwt/v5 exposes ErrTokenExpired for expiration issues
+		if errors.Is(err, jwt.ErrTokenExpired) {
+			return nil, ErrExpiredToken
+		}
+		return nil, ErrInvalidToken
 	}
 
 	claims, ok := token.Claims.(*Claims)
@@ -93,7 +98,7 @@ func ValidateToken(tokenString, secretKey string) (*Claims, error) {
 		return nil, ErrInvalidToken
 	}
 
-	// check expiration
+	// Additional safety (clock skew edge cases)
 	if claims.ExpiresAt != nil && claims.ExpiresAt.Before(time.Now()) {
 		return nil, ErrExpiredToken
 	}
@@ -117,19 +122,19 @@ func ValidateCustomToken(tokenString, secretKey string) (map[string]interface{},
 	})
 
 	if err != nil {
-		return nil, err
+		if errors.Is(err, jwt.ErrTokenExpired) {
+			return nil, ErrExpiredToken
+		}
+		return nil, ErrInvalidToken
 	}
 
 	claims, ok := token.Claims.(*CustomClaims)
 	if !ok || !token.Valid {
 		return nil, ErrInvalidToken
 	}
-
-	// check expiration
 	if claims.ExpiresAt != nil && claims.ExpiresAt.Before(time.Now()) {
 		return nil, ErrExpiredToken
 	}
-
 	return claims.Data, nil
 }
 

@@ -3,30 +3,53 @@
 ![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 
-A lightweight utility library for building REST APIs in Go, supporting both standard `net/http` and Echo framework.
+A lightweight utility library for building REST APIs in Go, supporting both standard net/http and Echo framework.
 
 ## Features
 
-### Standard Library (pkg/)
-- Database connection helpers for PostgreSQL with connection pooling
-- Standardized JSON response utilities
-- Request parsing and URL parameter extraction
-- SQL query builders for common CRUD operations
-- CORS and request logging middleware
-- Environment variable configuration loader
-
-### Echo Framework (pkg-echo/)
-- JWT authentication with custom claims support
-- Password hashing using bcrypt
-- GORM ORM connection helpers and transaction wrapper
-- Input validation (email format, required fields, string length)
-- Request binding and validation utilities
-- Echo-specific JSON response helpers
+- Standard Library (pkg/)
+  - PostgreSQL connection helpers (with pooling)
+  - Standardized JSON responses
+  - Request parsing and URL param helpers
+  - CRUD SQL query builders
+  - CORS and request logging middleware
+  - Environment config loader
+- Echo Framework (pkg-echo/)
+  - JWT auth (basic and custom claims)
+  - Password hashing (bcrypt) with configurable cost (BCRYPT_COST)
+  - GORM helpers: connect, auto-migrate, transaction, pagination
+  - Request binding and validation helpers
+  - Response helpers (Success, SuccessData, Paginated, errors)
+  - Middleware: JWT, role guard, user getters
+  - Validator utilities
+  - Health-check handler
 
 ## Installation
 
 ```bash
 go get github.com/Yoochan45/go-api-utils
+```
+
+## Environment Variables
+
+```env
+DATABASE_URL=postgresql://user:password@localhost:5432/dbname?sslmode=disable
+PORT=8080
+JWT_SECRET=your-secret-key
+
+# Optional: individual DB config (pkg/)
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=postgres
+DB_PASSWORD=secret
+DB_NAME=mydb
+DB_SSLMODE=disable
+
+# Optional: skip DB in pkg/database.Init
+SKIP_DB=1
+
+# Optional: bcrypt cost override (default is bcrypt.DefaultCost)
+BCRYPT_COST=12
 ```
 
 ## Quick Start
@@ -43,27 +66,33 @@ import (
     "github.com/Yoochan45/go-api-utils/pkg/response"
 )
 
+type Product struct {
+    ID    int
+    Name  string
+    Price int
+}
+
 func main() {
     // Connect to database
     db, _ := database.ConnectPostgresURL("postgresql://user:pass@localhost/db")
     defer database.Close(db)
-    
+
     // Setup routes
     mux := http.NewServeMux()
     mux.HandleFunc("/products", func(w http.ResponseWriter, r *http.Request) {
         rows, _ := db.Query("SELECT id, name, price FROM products")
         defer rows.Close()
-        
+
         var products []Product
         for rows.Next() {
             var p Product
             rows.Scan(&p.ID, &p.Name, &p.Price)
             products = append(products, p)
         }
-        
+
         response.Success(w, "products retrieved", products)
     })
-    
+
     // Add middleware
     handler := middleware.Logger(middleware.CORS(mux))
     http.ListenAndServe(":8080", handler)
@@ -79,476 +108,389 @@ import (
     "time"
     "github.com/Yoochan45/go-api-utils/pkg/config"
     "github.com/Yoochan45/go-api-utils/pkg-echo/auth"
-    "github.com/Yoochan45/go-api-utils/pkg-echo/middleware"
+    echomw "github.com/Yoochan45/go-api-utils/pkg-echo/middleware"
     "github.com/Yoochan45/go-api-utils/pkg-echo/orm"
     "github.com/Yoochan45/go-api-utils/pkg-echo/request"
     "github.com/Yoochan45/go-api-utils/pkg-echo/response"
     "github.com/labstack/echo/v4"
 )
 
+type User struct{ ID int }
+
 func main() {
     cfg := config.LoadEnv()
-    
+
     // Connect GORM
     db, _ := orm.ConnectGORM(cfg.DatabaseURL)
     orm.AutoMigrate(db, &User{})
-    
+
     e := echo.New()
-    
+
     // Public routes
     e.POST("/login", handleLogin)
-    
+
     // Protected routes
     api := e.Group("/api")
-    api.Use(middleware.JWTMiddleware(middleware.JWTConfig{
+    api.Use(echomw.JWTMiddleware(echomw.JWTConfig{
         SecretKey:      "your-secret",
         UseCustomToken: true,
     }))
     api.GET("/profile", handleProfile)
-    
+
     e.Start(":8080")
 }
 
 func handleLogin(c echo.Context) error {
-    var req LoginRequest
-    if !request.BindAndValidate(c, &req, map[string]string{
-        "email": req.Email, "password": req.Password,
-    }) {
-        return nil
+    var req struct {
+        Email    string `json:"email"`
+        Password string `json:"password"`
     }
-    
-    var user User
-    db.Where("email = ?", req.Email).First(&user)
-    
-    if !auth.ComparePassword(user.Password, req.Password) {
-        return response.Unauthorized(c, "invalid credentials")
+    // Bind then validate required fields by JSON tag
+    if !request.BindAndRequireFields(c, &req, "email", "password") {
+        return nil // error response already sent
     }
-    
-    token, _ := auth.GenerateCustomToken(map[string]interface{}{
-        "user_id": user.ID,
-        "email": user.Email,
+    if !request.ValidateEmail(c, req.Email) {
+        return nil // error response already sent
+    }
+
+    // Validate user (pseudo)
+    // ...
+
+    token, _ := auth.GenerateCustomToken(map[string]any{
+        "user_id": 1,
+        "email":   req.Email,
+        "role":    "user",
     }, "your-secret", 24*time.Hour)
-    
+
     return response.Success(c, "login success", map[string]string{"token": token})
 }
 
 func handleProfile(c echo.Context) error {
-    data := middleware.GetTokenData(c)
-    userID := request.GetInt(data, "user_id")
-    
-    return response.Success(c, "profile", map[string]interface{}{
-        "user_id": userID,
-        "email": request.GetString(data, "email"),
+    data := echomw.GetTokenData(c)
+    return response.Success(c, "profile", map[string]any{
+        "user_id": request.GetInt(data, "user_id"),
+        "email":   request.GetString(data, "email"),
+        "role":    request.GetString(data, "role"),
     })
 }
 ```
 
-## Package Documentation
-
-### pkg/database
-
-Connect to PostgreSQL database with automatic connection pooling.
-
-```go
-// Using DATABASE_URL environment variable
-db, err := database.ConnectPostgresURL(os.Getenv("DATABASE_URL"))
-
-// Using individual config parameters
-db, err := database.ConnectPostgres(database.PostgresConfig{
-    Host:     "localhost",
-    Port:     "5432",
-    User:     "postgres",
-    Password: "secret",
-    DBName:   "mydb",
-    SSLMode:  "disable",
-})
-
-// Auto-initialize (checks SKIP_DB env variable)
-cfg := config.LoadEnv()
-db, err := database.Init(cfg)
-
-// Close connection
-database.Close(db)
-```
-
-**Available Functions:**
-- `ConnectPostgres(config)` - Connect using config struct
-- `ConnectPostgresURL(url)` - Connect using DATABASE_URL string
-- `MustConnect(config)` - Connect or panic on error
-- `Init(config)` - Initialize with SKIP_DB support
-- `Close(db)` - Close database connection
-
----
-
-### pkg/response
-
-Send standardized JSON responses for net/http handlers.
-
-```go
-// Success response (200 OK)
-response.Success(w, "operation successful", data)
-
-// Created response (201 Created)
-response.Created(w, "resource created", newResource)
-
-// No content (204 No Content)
-response.NoContent(w)
-
-// Error responses
-response.BadRequest(w, "invalid input")          // 400
-response.Unauthorized(w, "authentication failed") // 401
-response.Forbidden(w, "access denied")            // 403
-response.NotFound(w, "resource not found")        // 404
-response.InternalServerError(w, "server error")   // 500
-```
-
-**Available Functions:**
-- `Success(w, message, data)` - 200 OK response
-- `Created(w, message, data)` - 201 Created response
-- `NoContent(w)` - 204 No Content
-- `BadRequest(w, message)` - 400 Bad Request
-- `Unauthorized(w, message)` - 401 Unauthorized
-- `Forbidden(w, message)` - 403 Forbidden
-- `NotFound(w, message)` - 404 Not Found
-- `InternalServerError(w, message)` - 500 Internal Server Error
-
----
-
-### pkg/request
-
-Parse and extract data from HTTP requests.
-
-```go
-// Parse JSON body
-var user User
-if err := request.ParseJSON(r, &user); err != nil {
-    response.BadRequest(w, "invalid JSON")
-}
-
-// Extract ID from URL path (/users/123)
-id, err := request.GetIDFromURL(r)
-
-// Get query parameters with defaults
-page := request.GetQueryParamInt(r, "page", 1)
-search := request.GetQueryParam(r, "search", "")
-
-// Extract path segment
-segment := request.GetPathSegment(r.URL.Path, 2) // /api/users/123 -> "123"
-```
-
-**Available Functions:**
-- `ParseJSON(r, v)` - Parse request body as JSON
-- `GetIDFromURL(r)` - Extract numeric ID from URL path
-- `GetQueryParam(r, key, defaultValue)` - Get string query parameter
-- `GetQueryParamInt(r, key, defaultValue)` - Get integer query parameter
-- `GetPathSegment(path, index)` - Extract path segment by index
-
----
-
-### pkg/repository
-
-Build SQL queries for common database operations.
-
-```go
-// Build INSERT query
-query, args := repository.BuildInsertQuery("users", map[string]interface{}{
-    "name": "John Doe",
-    "email": "john@example.com",
-    "age": 30,
-})
-db.Exec(query, args...)
-
-// Build UPDATE query
-query, args := repository.BuildUpdateQuery("users", 123, map[string]interface{}{
-    "name": "Jane Doe",
-    "email": "jane@example.com",
-})
-db.Exec(query, args...)
-
-// Build SELECT query
-query := repository.BuildSelectQuery("users", 
-    []string{"id", "name", "email"}, 
-    "age > 18 AND active = true",
-)
-rows, _ := db.Query(query)
-
-// Check if rows were affected
-result, _ := db.Exec(query, args...)
-if !repository.CheckRowsAffected(result) {
-    // No rows updated
-}
-```
-
-**Available Functions:**
-- `BuildInsertQuery(table, data)` - Generate INSERT statement
-- `BuildUpdateQuery(table, id, data)` - Generate UPDATE statement
-- `BuildSelectQuery(table, columns, where)` - Generate SELECT statement
-- `CheckRowsAffected(result)` - Check if any rows were affected
-- `ScanRows(rows, dest)` - Scan multiple rows into slice
-
----
-
-### pkg/middleware
-
-HTTP middleware for CORS and logging.
-
-```go
-mux := http.NewServeMux()
-mux.HandleFunc("/api/users", handleUsers)
-
-// Add CORS headers
-handler := middleware.CORS(mux)
-
-// Add request logging
-handler = middleware.Logger(handler)
-
-http.ListenAndServe(":8080", handler)
-```
-
-**Available Functions:**
-- `CORS(next)` - Add CORS headers (allow all origins)
-- `Logger(next)` - Log HTTP requests with method, path, and duration
-
----
+## Package Reference
 
 ### pkg/config
-
-Load environment variables from .env file.
+- LoadEnv() — load env with defaults
+- MustLoadEnv() — load or panic
 
 ```go
-// Load config (returns default if env not set)
 cfg := config.LoadEnv()
-fmt.Println(cfg.DatabaseURL)
-fmt.Println(cfg.Port) // default: "8080"
-
-// Load config or panic
-cfg := config.MustLoadEnv()
+_ = []string{cfg.DatabaseURL, cfg.Port}
 ```
 
-**Available Functions:**
-- `LoadEnv()` - Load environment variables with defaults
-- `MustLoadEnv()` - Load environment variables or panic
+### pkg/database
+- ConnectPostgres(config), ConnectPostgresURL(url)
+- MustConnect(config)
+- Init(config) // respects SKIP_DB
+- Close(db)
 
-**Supported Environment Variables:**
-- `DATABASE_URL` - PostgreSQL connection string
-- `PORT` - Server port (default: 8080)
-- `SKIP_DB` - Skip database connection (1 to enable)
+```go
+db, err := database.ConnectPostgresURL(os.Getenv("DATABASE_URL"))
+defer database.Close(db)
+```
+
+### pkg/response (net/http)
+
+// How to use (examples)
+```go
+// 200 OK with wrapper
+response.Success(w, "operation successful", data)
+
+// 201 Created
+response.Created(w, "resource created", newResource)
+
+// 204 No Content
+response.NoContent(w)
+
+// Errors
+response.BadRequest(w, "invalid input")              // 400
+response.Unauthorized(w, "authentication required")  // 401
+response.Forbidden(w, "access denied")               // 403
+response.NotFound(w, "resource not found")           // 404
+response.InternalServerError(w, "server error")      // 500
+```
+
+Function reference:
+- Success
+  - What it does: Send 200 OK with {success:true, message, data}
+  - Signature: func Success(w http.ResponseWriter, message string, data interface{}) error
+  - Example:
+    ```go
+    response.Success(w, "users retrieved", users)
+    ```
+- Created
+  - What it does: Send 201 Created with wrapper
+  - Signature: func Created(w http.ResponseWriter, message string, data interface{}) error
+  - Example:
+    ```go
+    response.Created(w, "user created", user)
+    ```
+- NoContent
+  - What it does: Send 204 No Content
+  - Signature: func NoContent(w http.ResponseWriter) error
+  - Example:
+    ```go
+    response.NoContent(w)
+    ```
+- BadRequest
+  - What it does: Send 400 with error message
+  - Signature: func BadRequest(w http.ResponseWriter, message string) error
+  - Example:
+    ```go
+    response.BadRequest(w, "invalid payload")
+    ```
+- Unauthorized
+  - What it does: Send 401 with error message
+  - Signature: func Unauthorized(w http.ResponseWriter, message string) error
+  - Example:
+    ```go
+    response.Unauthorized(w, "login required")
+    ```
+- Forbidden
+  - What it does: Send 403 with error message
+  - Signature: func Forbidden(w http.ResponseWriter, message string) error
+  - Example:
+    ```go
+    response.Forbidden(w, "not allowed")
+    ```
+- NotFound
+  - What it does: Send 404 with error message
+  - Signature: func NotFound(w http.ResponseWriter, message string) error
+  - Example:
+    ```go
+    response.NotFound(w, "user not found")
+    ```
+- InternalServerError
+  - What it does: Send 500 with error message
+  - Signature: func InternalServerError(w http.ResponseWriter, message string) error
+  - Example:
+    ```go
+    response.InternalServerError(w, "unexpected error")
+    ```
+
+### pkg/request (net/http)
+- ParseJSON
+- GetIDFromURL
+- GetQueryParam, GetQueryParamInt
+- GetPathSegment
+
+```go
+var u User
+_ = request.ParseJSON(r, &u)
+id, _ := request.GetIDFromURL(r)
+```
+
+### pkg/repository
+- BuildInsertQuery, BuildUpdateQuery, BuildSelectQuery
+- CheckRowsAffected
+- ScanRows
+
+```go
+q, args := repository.BuildInsertQuery("users", map[string]any{"name": "John"})
+db.Exec(q, args...)
+```
+
+### pkg/middleware (net/http)
+- CORS, Logger
+
+```go
+handler := middleware.Logger(middleware.CORS(mux))
+```
 
 ---
 
 ### pkg-echo/auth
-
-JWT token generation/validation and password hashing.
+- HashPassword, ComparePassword (BCRYPT_COST supported)
+- GenerateToken, ValidateToken
+- GenerateCustomToken, ValidateCustomToken
 
 ```go
-// Hash password before saving to database
-hashedPassword, err := auth.HashPassword("user-password")
-
-// Compare password during login
-isValid := auth.ComparePassword(hashedPassword, "user-password")
-
-// Generate JWT token with custom claims
-token, err := auth.GenerateCustomToken(map[string]interface{}{
-    "user_id": 123,
-    "email": "user@example.com",
-    "role": "admin",
-}, "secret-key", 24*time.Hour)
-
-// Validate JWT token
-data, err := auth.ValidateCustomToken(tokenString, "secret-key")
-userID := int(data["user_id"].(float64))
+hashed, _ := auth.HashPassword("secret")
+ok := auth.ComparePassword(hashed, "secret")
 ```
-
-**Available Functions:**
-- `HashPassword(password)` - Hash password using bcrypt
-- `ComparePassword(hashed, plain)` - Verify password against hash
-- `GenerateToken(userID, email, role, secret, expiry)` - Generate basic JWT token
-- `GenerateCustomToken(data, secret, expiry)` - Generate JWT with custom claims
-- `ValidateToken(token, secret)` - Validate basic JWT token
-- `ValidateCustomToken(token, secret)` - Validate custom JWT token
-- `ParseClaims(token)` - Parse claims without validation
-
----
 
 ### pkg-echo/middleware
-
-JWT authentication middleware for Echo framework.
+- JWTMiddleware(config)
+- RequireRoles(roles...)
+- GetTokenData(c)
+- CurrentUserID(c), CurrentEmail(c), CurrentRole(c)
 
 ```go
-e := echo.New()
-
-// Public routes (no authentication)
-e.POST("/login", handleLogin)
-
-// Protected routes (require JWT token)
 api := e.Group("/api")
-api.Use(middleware.JWTMiddleware(middleware.JWTConfig{
-    SecretKey:      "your-secret-key",
-    UseCustomToken: true,
+api.Use(echomw.JWTMiddleware(echomw.JWTConfig{
+    SecretKey: "secret", UseCustomToken: true,
 }))
-api.GET("/profile", handleProfile)
-api.POST("/products", handleCreateProduct)
+api.Use(echomw.RequireRoles("admin"))
 
-// Access user data in handler
-func handleProfile(c echo.Context) error {
-    tokenData := middleware.GetTokenData(c)
-    userID := request.GetInt(tokenData, "user_id")
-    email := request.GetString(tokenData, "email")
-    
-    return response.Success(c, "profile", map[string]interface{}{
-        "user_id": userID,
-        "email": email,
-    })
-}
+uid := echomw.CurrentUserID(c)
+email := echomw.CurrentEmail(c)
+role := echomw.CurrentRole(c)
+_ = []any{uid, email, role}
 ```
 
-**Available Functions:**
-- `JWTMiddleware(config)` - Validate JWT from Authorization header
-- `GetUserID(c)` - Get user ID from context (for basic tokens)
-- `GetUserEmail(c)` - Get email from context (for basic tokens)
-- `GetUserRole(c)` - Get role from context (for basic tokens)
-- `GetClaims(c)` - Get full claims from context (for basic tokens)
-- `GetTokenData(c)` - Get custom token data as map (for custom tokens)
+### pkg-echo/request
+- BindAndRequireFields(c, v, fields...)
+- RequireFields(v, fields...) -> (ok, msg)
+- ValidateEmail(c, email)
+- QueryString, QueryInt, PathParamUint
+- GetInt, GetUint, GetString, GetBool, GetFloat
 
----
+```go
+if !request.BindAndRequireFields(c, &req, "email", "password") { return nil }
+if !request.ValidateEmail(c, req.Email) { return nil }
+
+q := request.QueryString(c, "q", "")
+page := request.QueryInt(c, "page", 1)
+id := request.PathParamUint(c, "id")
+_ = []any{q, page, id}
+```
+
+Note:
+- BindAndValidate(c, v, map[string]string{...}) is deprecated. Prefer BindAndRequireFields.
 
 ### pkg-echo/response
 
-Standardized JSON responses for Echo handlers.
-
+// How to use (examples)
 ```go
-// Success responses
-response.Success(c, "operation successful", data)      // 200 OK with wrapper
-response.SuccessData(c, data)                          // 200 OK without wrapper
-response.Created(c, "resource created", data)          // 201 Created
-response.NoContent(c)                                  // 204 No Content
+// 200 OK with wrapper
+response.Success(c, "ok", data)
 
-// Error responses
-response.BadRequest(c, "invalid input")                // 400 Bad Request
-response.Unauthorized(c, "authentication required")    // 401 Unauthorized
-response.Forbidden(c, "access denied")                 // 403 Forbidden
-response.NotFound(c, "resource not found")             // 404 Not Found
-response.InternalServerError(c, "server error")        // 500 Internal Server Error
+// 200 OK raw data (no wrapper)
+response.SuccessData(c, data)
+
+// 201 Created
+response.Created(c, "created", created)
+
+// 204 No Content
+response.NoContent(c)
+
+// Errors
+response.BadRequest(c, "invalid input")              // 400
+response.Unauthorized(c, "authentication required")  // 401
+response.Forbidden(c, "access denied")               // 403
+response.NotFound(c, "not found")                    // 404
+response.InternalServerError(c, "server error")      // 500
+
+// 200 OK with pagination metadata
+meta := map[string]any{"page": 1, "per_page": 10, "total": 42, "total_pages": 5}
+response.Paginated(c, "list retrieved", items, meta)
 ```
 
-**Available Functions:**
-- `Success(c, message, data)` - 200 OK with success wrapper
-- `SuccessData(c, data)` - 200 OK without wrapper
-- `Created(c, message, data)` - 201 Created
-- `NoContent(c)` - 204 No Content
-- `BadRequest(c, message)` - 400 Bad Request
-- `Unauthorized(c, message)` - 401 Unauthorized
-- `Forbidden(c, message)` - 403 Forbidden
-- `NotFound(c, message)` - 404 Not Found
-- `InternalServerError(c, message)` - 500 Internal Server Error
-
----
-
-### pkg-echo/request
-
-Request binding and validation for Echo handlers.
-
-```go
-// Bind and validate in one call
-var req LoginRequest
-if !request.BindAndValidate(c, &req, map[string]string{
-    "email": req.Email,
-    "password": req.Password,
-}) {
-    return nil // error response already sent
-}
-
-// Validate email format
-if !request.ValidateEmail(c, req.Email) {
-    return nil // error response already sent
-}
-
-// Extract data from JWT token (set by middleware)
-tokenData := middleware.GetTokenData(c)
-userID := request.GetInt(tokenData, "user_id")
-email := request.GetString(tokenData, "email")
-isAdmin := request.GetBool(tokenData, "is_admin")
-price := request.GetFloat(tokenData, "price")
-```
-
-**Available Functions:**
-- `BindAndValidate(c, v, fields)` - Bind JSON and validate required fields
-- `ValidateEmail(c, email)` - Validate email format and send error if invalid
-- `GetInt(data, key)` - Safely extract int from map
-- `GetString(data, key)` - Safely extract string from map
-- `GetBool(data, key)` - Safely extract bool from map
-- `GetFloat(data, key)` - Safely extract float64 from map
-
----
-
-### pkg-echo/validator
-
-Input validation utilities.
-
-```go
-// Validate email format
-if !validator.IsValidEmail("user@example.com") {
-    return errors.New("invalid email")
-}
-
-// Check if string is empty or whitespace
-if validator.IsEmpty("   ") {
-    return errors.New("field is required")
-}
-
-// Check minimum length
-if !validator.MinLength("password", 8) {
-    return errors.New("password too short")
-}
-
-// Validate multiple required fields
-valid, errMsg := validator.ValidateRequired(map[string]string{
-    "email": user.Email,
-    "password": user.Password,
-    "name": user.Name,
-})
-if !valid {
-    return errors.New(errMsg)
-}
-```
-
-**Available Functions:**
-- `IsValidEmail(email)` - Check if email format is valid
-- `IsEmpty(s)` - Check if string is empty or whitespace only
-- `MinLength(s, min)` - Check if string meets minimum length
-- `ValidateRequired(fields)` - Validate multiple required fields at once
-
----
+Function reference:
+- Success
+  - What it does: 200 OK with {success:true, message, data}
+  - Signature: func Success(c echo.Context, message string, data interface{}) error
+  - Example:
+    ```go
+    return response.Success(c, "users retrieved", users)
+    ```
+- SuccessData
+  - What it does: 200 OK with raw data (no wrapper)
+  - Signature: func SuccessData(c echo.Context, data interface{}) error
+  - Example:
+    ```go
+    return response.SuccessData(c, users)
+    ```
+- Created
+  - What it does: 201 Created with wrapper
+  - Signature: func Created(c echo.Context, message string, data interface{}) error
+  - Example:
+    ```go
+    return response.Created(c, "user created", user)
+    ```
+- NoContent
+  - What it does: 204 No Content
+  - Signature: func NoContent(c echo.Context) error
+  - Example:
+    ```go
+    return response.NoContent(c)
+    ```
+- BadRequest
+  - What it does: 400 with error message
+  - Signature: func BadRequest(c echo.Context, message string) error
+  - Example:
+    ```go
+    return response.BadRequest(c, "invalid payload")
+    ```
+- Unauthorized
+  - What it does: 401 with error message
+  - Signature: func Unauthorized(c echo.Context, message string) error
+  - Example:
+    ```go
+    return response.Unauthorized(c, "login required")
+    ```
+- Forbidden
+  - What it does: 403 with error message
+  - Signature: func Forbidden(c echo.Context, message string) error
+  - Example:
+    ```go
+    return response.Forbidden(c, "not allowed")
+    ```
+- NotFound
+  - What it does: 404 with error message
+  - Signature: func NotFound(c echo.Context, message string) error
+  - Example:
+    ```go
+    return response.NotFound(c, "user not found")
+    ```
+- InternalServerError
+  - What it does: 500 with error message
+  - Signature: func InternalServerError(c echo.Context, message string) error
+  - Example:
+    ```go
+    return response.InternalServerError(c, "unexpected error")
+    ```
+- Paginated
+  - What it does: 200 OK with {success:true, message, data, meta}
+  - Signature: func Paginated(c echo.Context, message string, data interface{}, meta interface{}) error
+  - Example:
+    ```go
+    meta := map[string]any{"page": page, "per_page": per, "total": total}
+    return response.Paginated(c, "products", products, meta)
+    ```
 
 ### pkg-echo/orm
-
-GORM database connection and transaction helpers.
+- ConnectGORM(dsn)
+- AutoMigrate(db, models...)
+- WithTransaction(db, fn)
+- ApplyPagination(db, page, perPage)
+- CountAndPaginate(base, model, page, perPage, out) -> (total, err)
 
 ```go
-// Connect to PostgreSQL using GORM
-db, err := orm.ConnectGORM("postgresql://user:pass@localhost:5432/dbname")
+var products []Product
+base := db.Where("active = ?", true)
+total, err := orm.CountAndPaginate(base, &Product{}, page, perPage, &products)
+if err != nil { return response.InternalServerError(c, "failed to fetch") }
 
-// Auto-migrate models
-orm.AutoMigrate(db, &User{}, &Product{}, &Order{})
-
-// Execute operations in transaction (auto-rollback on error)
-err := orm.WithTransaction(db, func(tx *gorm.DB) error {
-    if err := tx.Create(&user).Error; err != nil {
-        return err
-    }
-    if err := tx.Create(&profile).Error; err != nil {
-        return err
-    }
-    return nil
-})
+meta := map[string]any{
+  "page": page, "per_page": perPage, "total": total,
+  "total_pages": (total + int64(perPage) - 1) / int64(perPage),
+}
+return response.Paginated(c, "products", products, meta)
 ```
 
-**Available Functions:**
-- `ConnectGORM(dsn)` - Connect to PostgreSQL using GORM
-- `AutoMigrate(db, models...)` - Run auto-migration for models
-- `WithTransaction(db, fn)` - Execute function in database transaction
+### pkg-echo/validator
+- IsValidEmail, IsEmpty, MinLength
+- ValidateRequired(map[string]string) -> (ok, msg)
 
----
+```go
+ok, msg := validator.ValidateRequired(map[string]string{"email": req.Email})
+```
+
+### pkg-echo/health
+- NewHandler(db) — simple health endpoint
+
+```go
+e.GET("/health", health.NewHandler(db))
+```
 
 ## Common Use Cases
 
@@ -560,27 +502,24 @@ func handleRegister(c echo.Context) error {
         Email    string `json:"email"`
         Password string `json:"password"`
     }
-    
-    if !request.BindAndValidate(c, &req, map[string]string{
-        "email": req.Email, "password": req.Password,
-    }) {
+
+    if !request.BindAndRequireFields(c, &req, "email", "password") {
         return nil
     }
-    
     if !request.ValidateEmail(c, req.Email) {
         return nil
     }
-    
+
     hashedPassword, _ := auth.HashPassword(req.Password)
     user := User{Email: req.Email, Password: hashedPassword}
-    
+
     if err := db.Create(&user).Error; err != nil {
         return response.BadRequest(c, "email already exists")
     }
-    
-    return response.Created(c, "user registered", map[string]interface{}{
+
+    return response.Created(c, "user registered", map[string]any{
         "user_id": user.ID,
-        "email": user.Email,
+        "email":   user.Email,
     })
 }
 ```
@@ -593,192 +532,109 @@ func handleLogin(c echo.Context) error {
         Email    string `json:"email"`
         Password string `json:"password"`
     }
-    
-    if !request.BindAndValidate(c, &req, map[string]string{
-        "email": req.Email, "password": req.Password,
-    }) {
+
+    if !request.BindAndRequireFields(c, &req, "email", "password") {
         return nil
     }
-    
+    if !request.ValidateEmail(c, req.Email) {
+        return nil
+    }
+
     var user User
     if err := db.Where("email = ?", req.Email).First(&user).Error; err != nil {
         return response.Unauthorized(c, "invalid credentials")
     }
-    
+
     if !auth.ComparePassword(user.Password, req.Password) {
         return response.Unauthorized(c, "invalid credentials")
     }
-    
-    token, _ := auth.GenerateCustomToken(map[string]interface{}{
-        "user_id": user.ID,
-        "email": user.Email,
+
+    token, _ := auth.GenerateCustomToken(map[string]any{
+        "user_id": user.ID, "email": user.Email,
     }, "secret-key", 24*time.Hour)
-    
+
     return response.Success(c, "login successful", map[string]string{
         "token": token,
     })
 }
 ```
 
-### Protected Route with JWT Authentication
+### Protected Route + Role Guard
 
 ```go
-func setupRoutes(e *echo.Echo) {
-    // Public routes
-    e.POST("/login", handleLogin)
-    
-    // Protected routes
-    api := e.Group("/api")
-    api.Use(middleware.JWTMiddleware(middleware.JWTConfig{
-        SecretKey: "your-secret-key",
-        UseCustomToken: true,
-    }))
-    
-    api.GET("/profile", handleProfile)
-    api.GET("/orders", handleGetOrders)
-}
-
-func handleProfile(c echo.Context) error {
-    tokenData := middleware.GetTokenData(c)
-    userID := request.GetInt(tokenData, "user_id")
-    
-    var user User
-    db.First(&user, userID)
-    
-    return response.Success(c, "profile retrieved", user)
-}
+api := e.Group("/api/admin")
+api.Use(echomw.JWTMiddleware(echomw.JWTConfig{SecretKey: "secret", UseCustomToken: true}))
+api.Use(echomw.RequireRoles("admin"))
 ```
 
-### Database Transaction
+### Transaction
 
 ```go
-func createOrderWithItems(userID int, items []Item) error {
-    return orm.WithTransaction(db, func(tx *gorm.DB) error {
-        order := Order{UserID: userID}
-        if err := tx.Create(&order).Error; err != nil {
-            return err
-        }
-        
-        for _, item := range items {
-            orderItem := OrderItem{
-                OrderID: order.ID,
-                ProductID: item.ProductID,
-                Quantity: item.Quantity,
-            }
-            if err := tx.Create(&orderItem).Error; err != nil {
-                return err
-            }
-        }
-        
-        return nil
-    })
-}
+err := orm.WithTransaction(db, func(tx *gorm.DB) error {
+    if err := tx.Create(&user).Error; err != nil { return err }
+    if err := tx.Create(&profile).Error; err != nil { return err }
+    return nil
+})
 ```
-
----
 
 ## Examples
 
-| Example | Description |
-|---------|-------------|
-| [01-basic-api](examples/01-basic-api) | Basic REST API with middleware |
-| [02-database-connection](examples/02-database-connection) | Database connection patterns |
-| [03-crud-api](examples/03-crud-api) | Full CRUD operations with PostgreSQL |
-| [04-echo-jwt-api](examples/04-echo-jwt-api) | Echo framework integration guide |
+- examples/01-basic-api — Basic REST API with middleware
+- examples/02-database-connection — Database connection patterns
+- examples/03-crud-api — Full CRUD operations with PostgreSQL
+- examples/04-echo-jwt-api — Echo + JWT integration
 
-Run examples:
+Run:
 ```bash
 cd examples/01-basic-api && go run main.go
 cd examples/02-database-connection && go run main.go
 cd examples/03-crud-api && go run main.go
 ```
 
----
-
 ## Dependencies
 
-### For pkg/ (Standard Library)
-```bash
-go get github.com/lib/pq
-```
-
-### For pkg-echo/ (Echo Framework)
-```bash
-go get github.com/labstack/echo/v4
-go get github.com/golang-jwt/jwt/v5
-go get golang.org/x/crypto
-go get gorm.io/gorm
-go get gorm.io/driver/postgres
-```
-
----
-
-## Environment Variables
-
-Create `.env` file in your project root:
-
-```env
-DATABASE_URL=postgresql://user:password@localhost:5432/dbname?sslmode=disable
-PORT=8080
-JWT_SECRET=your-secret-key
-
-# Optional: Individual database config
-DB_HOST=localhost
-DB_PORT=5432
-DB_USER=postgres
-DB_PASSWORD=secret
-DB_NAME=mydb
-DB_SSLMODE=disable
-
-# Optional: Skip database connection
-SKIP_DB=1
-```
-
----
+- pkg/: github.com/lib/pq
+- pkg-echo/: github.com/labstack/echo/v4, github.com/golang-jwt/jwt/v5, golang.org/x/crypto, gorm.io/gorm, gorm.io/driver/postgres
 
 ## Response Format
 
-### Success Response (2xx)
+Success:
 ```json
-{
-  "success": true,
-  "message": "operation successful",
-  "data": { }
-}
+{ "success": true, "message": "operation successful", "data": {} }
 ```
 
-### Error Response (4xx, 5xx)
+Error:
 ```json
-{
-  "success": false,
-  "error": "error message"
-}
+{ "success": false, "error": "error message" }
 ```
-
----
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
-
----
+Contributions are welcome! Please open a PR.
 
 ## License
 
-MIT License - see LICENSE file for details
-
----
+MIT
 
 ## Author
 
-**Aisiya Qutwatunnada**  
-GitHub: [@Yoochan45](https://github.com/Yoochan45)
-
----
+Aisiya Qutwatunnada — GitHub: @Yoochan45
 
 ## Changelog
 
-### v0.2.0 (Latest)
+### v0.2.5 (Latest)
+- Echo request helpers: BindAndRequireFields, RequireFields (BindAndValidate deprecated)
+- Request helpers: QueryString, QueryInt, PathParamUint; token data GetUint
+- Response: SuccessData, Paginated
+- JWT middleware: stronger Authorization parsing; expired token maps to 401 “token expired”; context getters CurrentUserID/Email/Role
+- Middleware: RequireRoles for simple RBAC
+- ORM: ApplyPagination, CountAndPaginate helpers; WithTransaction uses db.Transaction
+- Health: health.NewHandler(db) endpoint
+- Validator: ValidateRequired trims whitespace
+- Auth: bcrypt cost override via BCRYPT_COST; token validation maps jwt.ErrTokenExpired -> ErrExpiredToken
+- Docs: updated examples and usage
+
+### v0.2.0
 - Added Echo framework support (pkg-echo/)
 - Added JWT authentication with custom claims
 - Added GORM ORM helpers

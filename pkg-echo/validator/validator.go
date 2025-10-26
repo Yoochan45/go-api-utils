@@ -22,11 +22,15 @@ func MinLength(s string, min int) bool {
 	return len(strings.TrimSpace(s)) >= min
 }
 
-// ValidateRequired checks if all fields are not empty
+// ValidateRequired checks if all provided fields (key -> value) are non-empty after trimming spaces.
+// Returns (true, "") if all valid, otherwise (false, "<field> is required") for the first missing field.
+// Example:
+//
+//	ok, msg := validator.ValidateRequired(map[string]string{"email": req.Email, "password": req.Password})
 func ValidateRequired(fields map[string]string) (bool, string) {
-	for name, value := range fields {
-		if IsEmpty(value) {
-			return false, name + " is required"
+	for k, v := range fields {
+		if strings.TrimSpace(v) == "" {
+			return false, k + " is required"
 		}
 	}
 	return true, ""

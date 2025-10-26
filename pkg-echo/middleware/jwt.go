@@ -1,28 +1,27 @@
 package middleware
 
 import (
-	"net/http"
 	"strings"
 
 	"github.com/Yoochan45/go-api-utils/pkg-echo/auth"
+	"github.com/Yoochan45/go-api-utils/pkg-echo/response"
 	"github.com/labstack/echo/v4"
 )
 
-// JWTConfig holds JWT middleware configuration
-type JWTConfig struct {
-	SecretKey      string
-	SkipperFunc    func(c echo.Context) bool // optional: skip auth for certain routes
-	UseCustomToken bool                      // use custom token validation
-}
-
-// JWTMiddleware validates JWT token from Authorization header
-// Use this to protect routes that require authentication
-// Token should be in format: "Bearer <token>"
+// JWTConfig configures JWT middleware behavior.
 // Example:
 //
-//	e.Use(middleware.JWTMiddleware(middleware.JWTConfig{SecretKey: "your-secret"}))
-//	// or for specific route group:
-//	api := e.Group("/api", middleware.JWTMiddleware(cfg))
+//	api := e.Group("/api")
+//	api.Use(middleware.JWTMiddleware(middleware.JWTConfig{SecretKey: "secret", UseCustomToken: true}))
+type JWTConfig struct {
+	SecretKey      string
+	UseCustomToken bool
+	SkipperFunc    func(c echo.Context) bool
+}
+
+// JWTMiddleware validates Bearer token from Authorization header and injects claims into context.
+// For custom token: stores map data under "token_data".
+// For basic token: stores user_id, email, role, and "claims".
 func JWTMiddleware(config JWTConfig) echo.MiddlewareFunc {
 	if config.SecretKey == "" {
 		panic("JWT secret key cannot be empty")
@@ -30,64 +29,53 @@ func JWTMiddleware(config JWTConfig) echo.MiddlewareFunc {
 
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			// skip if skipper func provided and returns true
 			if config.SkipperFunc != nil && config.SkipperFunc(c) {
 				return next(c)
 			}
 
-			// extract token from Authorization header
 			authHeader := c.Request().Header.Get("Authorization")
 			if authHeader == "" {
-				return c.JSON(http.StatusUnauthorized, map[string]string{
-					"error": "missing authorization header",
-				})
+				return response.Unauthorized(c, "missing authorization header")
 			}
-
-			// check Bearer prefix
-			parts := strings.Split(authHeader, " ")
-			if len(parts) != 2 || parts[0] != "Bearer" {
-				return c.JSON(http.StatusUnauthorized, map[string]string{
-					"error": "invalid authorization header format",
-				})
+			parts := strings.Fields(authHeader)
+			if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+				return response.Unauthorized(c, "invalid authorization header format")
 			}
-
 			tokenString := parts[1]
 
-			// validate token (custom or standard)
 			if config.UseCustomToken {
 				data, err := auth.ValidateCustomToken(tokenString, config.SecretKey)
 				if err != nil {
-					return c.JSON(http.StatusUnauthorized, map[string]string{
-						"error": "invalid or expired token",
-					})
+					if err == auth.ErrExpiredToken {
+						return response.Unauthorized(c, "token expired")
+					}
+					return response.Unauthorized(c, "invalid token")
 				}
-
-				// store all custom data in context
 				c.Set("token_data", data)
-
-				// also set common fields if they exist
-				if userID, ok := data["user_id"].(float64); ok {
-					c.Set("user_id", int(userID))
+				// Convenience extractions (if present)
+				if v, ok := data["user_id"]; ok {
+					c.Set("user_id", v)
 				}
-				if email, ok := data["email"].(string); ok {
-					c.Set("email", email)
+				if v, ok := data["email"]; ok {
+					c.Set("email", v)
 				}
-				if role, ok := data["role"].(string); ok {
-					c.Set("role", role)
+				if v, ok := data["role"]; ok {
+					c.Set("role", v)
 				}
 			} else {
 				claims, err := auth.ValidateToken(tokenString, config.SecretKey)
 				if err != nil {
-					return c.JSON(http.StatusUnauthorized, map[string]string{
-						"error": "invalid or expired token",
-					})
+					if err == auth.ErrExpiredToken {
+						return response.Unauthorized(c, "token expired")
+					}
+					return response.Unauthorized(c, "invalid token")
 				}
-
-				// store claims in context for handler access
+				c.Set("claims", claims)
 				c.Set("user_id", claims.UserID)
 				c.Set("email", claims.Email)
-				c.Set("role", claims.Role)
-				c.Set("claims", claims)
+				if claims.Role != "" {
+					c.Set("role", claims.Role)
+				}
 			}
 
 			return next(c)
@@ -95,51 +83,18 @@ func JWTMiddleware(config JWTConfig) echo.MiddlewareFunc {
 	}
 }
 
-// GetUserID retrieves user ID from Echo context (set by JWTMiddleware)
-// Use this in your handlers to get authenticated user ID
-// Example:
-//
-//	userID := middleware.GetUserID(c)
-func GetUserID(c echo.Context) int {
-	if id, ok := c.Get("user_id").(int); ok {
-		return id
-	}
-	return 0
-}
-
-// GetUserEmail retrieves email from Echo context
-func GetUserEmail(c echo.Context) string {
-	if email, ok := c.Get("email").(string); ok {
-		return email
-	}
-	return ""
-}
-
-// GetUserRole retrieves role from Echo context
-func GetUserRole(c echo.Context) string {
-	if role, ok := c.Get("role").(string); ok {
-		return role
-	}
-	return ""
-}
-
-// GetClaims retrieves full claims from Echo context
-func GetClaims(c echo.Context) *auth.Claims {
-	if claims, ok := c.Get("claims").(*auth.Claims); ok {
-		return claims
-	}
-	return nil
-}
-
-// GetTokenData retrieves custom token data from Echo context
-// Use this when using custom tokens
+// GetTokenData returns custom token data from context or empty map if not present.
 // Example:
 //
 //	data := middleware.GetTokenData(c)
-//	firstName := data["first_name"].(string)
+//	userID := request.GetInt(data, "user_id")
 func GetTokenData(c echo.Context) map[string]interface{} {
-	if data, ok := c.Get("token_data").(map[string]interface{}); ok {
-		return data
+	v := c.Get("token_data")
+	if v == nil {
+		return map[string]interface{}{}
 	}
-	return nil
+	if m, ok := v.(map[string]interface{}); ok {
+		return m
+	}
+	return map[string]interface{}{}
 }
