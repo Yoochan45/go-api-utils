@@ -14,18 +14,40 @@ type Response struct {
 	Error   string      `json:"error,omitempty"`
 }
 
-// Success sends 200 OK with data
+// Success sends a standardized 200 OK JSON response with message and data.
+// Example:
+//
+//	return response.Success(c, "books retrieved", books)
 func Success(c echo.Context, message string, data interface{}) error {
-	return c.JSON(http.StatusOK, Response{
-		Success: true,
-		Message: message,
-		Data:    data,
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"success": true,
+		"message": message,
+		"data":    data,
 	})
 }
 
-// SuccessData sends 200 OK with plain data (tanpa wrapper)
+// SuccessData sends a 200 OK JSON response with raw data (no wrapper).
+// Useful for list/detail endpoints where message is unnecessary.
+// Example:
+//
+//	return response.SuccessData(c, books)
 func SuccessData(c echo.Context, data interface{}) error {
 	return c.JSON(http.StatusOK, data)
+}
+
+// Paginated sends a standardized 200 OK response with pagination metadata.
+// "meta" can be any struct/map with fields like page, per_page, total, total_pages.
+// Example:
+//
+//	meta := map[string]interface{}{"page": 1, "per_page": 10, "total": 42, "total_pages": 5}
+//	return response.Paginated(c, "books retrieved", books, meta)
+func Paginated(c echo.Context, message string, data interface{}, meta interface{}) error {
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"success": true,
+		"message": message,
+		"data":    data,
+		"meta":    meta,
+	})
 }
 
 // Created sends 201 Created

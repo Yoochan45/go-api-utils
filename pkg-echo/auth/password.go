@@ -1,24 +1,34 @@
 package auth
 
 import (
+	"os"
+	"strconv"
+
 	"golang.org/x/crypto/bcrypt"
 )
 
-// HashPassword hashes plain password using bcrypt
-// Use this before saving password to database
+const defaultCost = bcrypt.DefaultCost
+
+// HashPassword hashes plain text password using bcrypt.
+// BCRYPT_COST can override default cost (env var).
 // Example:
 //
-//	hashed, err := auth.HashPassword("mypassword123")
+//	hashed, err := auth.HashPassword("secret")
 func HashPassword(password string) (string, error) {
-	bytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	cost := defaultCost
+	if v := os.Getenv("BCRYPT_COST"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= bcrypt.MinCost && n <= bcrypt.MaxCost {
+			cost = n
+		}
+	}
+	bytes, err := bcrypt.GenerateFromPassword([]byte(password), cost)
 	return string(bytes), err
 }
 
-// ComparePassword checks if plain password matches hashed password
-// Use this during login validation
+// ComparePassword compares bcrypt hashed password with plain text.
 // Example:
 //
-//	valid := auth.ComparePassword(hashedFromDB, inputPassword)
+//	ok := auth.ComparePassword(user.Password, "secret")
 func ComparePassword(hashedPassword, plainPassword string) bool {
 	err := bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(plainPassword))
 	return err == nil
