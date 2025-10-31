@@ -622,7 +622,7 @@ Aisiya Qutwatunnada — GitHub: @Yoochan45
 
 ## Changelog
 
-### v0.2.5 (Latest)
+### v0.2.6 (Latest)
 - Echo request helpers: BindAndRequireFields, RequireFields (BindAndValidate deprecated)
 - Request helpers: QueryString, QueryInt, PathParamUint; token data GetUint
 - Response: SuccessData, Paginated
