@@ -14,7 +14,7 @@ The `pkg-echo` package provides ready-to-use utilities for common REST API patte
 ## Installation
 
 ```bash
-go get github.com/Yoochan45/go-api-utils
+go get github.com/yoockh/go-api-utils
 ```
 
 ---
@@ -27,8 +27,8 @@ go get github.com/Yoochan45/go-api-utils
 package main
 
 import (
-    "github.com/Yoochan45/go-api-utils/pkg/config"
-    "github.com/Yoochan45/go-api-utils/pkg-echo/orm"
+    "github.com/yoockh/go-api-utils/pkg/config"
+    "github.com/yoockh/go-api-utils/pkg-echo/orm"
     "gorm.io/gorm"
 )
 
@@ -54,7 +54,7 @@ package service
 
 import (
     "time"
-    "github.com/Yoochan45/go-api-utils/pkg-echo/auth"
+    "github.com/yoockh/go-api-utils/pkg-echo/auth"
     "gorm.io/gorm"
 )
 
@@ -100,8 +100,8 @@ func (s *AuthService) Login(email, password string) (string, error) {
 package handler
 
 import (
-    "github.com/Yoochan45/go-api-utils/pkg-echo/request"
-    "github.com/Yoochan45/go-api-utils/pkg-echo/response"
+    "github.com/yoockh/go-api-utils/pkg-echo/request"
+    "github.com/yoockh/go-api-utils/pkg-echo/response"
     "github.com/labstack/echo/v4"
 )
 
@@ -157,9 +157,9 @@ func (h *AuthHandler) Login(c echo.Context) error {
 package handler
 
 import (
-    "github.com/Yoochan45/go-api-utils/pkg-echo/middleware"
-    "github.com/Yoochan45/go-api-utils/pkg-echo/request"
-    "github.com/Yoochan45/go-api-utils/pkg-echo/response"
+    "github.com/yoockh/go-api-utils/pkg-echo/middleware"
+    "github.com/yoockh/go-api-utils/pkg-echo/request"
+    "github.com/yoockh/go-api-utils/pkg-echo/response"
     "github.com/labstack/echo/v4"
 )
 
@@ -183,7 +183,7 @@ func (h *ProfileHandler) GetProfile(c echo.Context) error {
 package main
 
 import (
-    "github.com/Yoochan45/go-api-utils/pkg-echo/middleware"
+    "github.com/yoockh/go-api-utils/pkg-echo/middleware"
     "github.com/labstack/echo/v4"
 )
 
@@ -210,8 +210,8 @@ func setupRoutes(e *echo.Echo, jwtSecret string) {
 package main
 
 import (
-    "github.com/Yoochan45/go-api-utils/pkg/config"
-    "github.com/Yoochan45/go-api-utils/pkg-echo/orm"
+    "github.com/yoockh/go-api-utils/pkg/config"
+    "github.com/yoockh/go-api-utils/pkg-echo/orm"
     "github.com/labstack/echo/v4"
     echoMiddleware "github.com/labstack/echo/v4/middleware"
 )
@@ -251,7 +251,7 @@ func main() {
 Use `orm.WithTransaction` for operations that require atomicity:
 
 ```go
-import "github.com/Yoochan45/go-api-utils/pkg-echo/orm"
+import "github.com/yoockh/go-api-utils/pkg-echo/orm"
 
 func (s *OrderService) CreateOrder(userID int, items []Item) error {
     return orm.WithTransaction(s.db, func(tx *gorm.DB) error {
@@ -279,7 +279,7 @@ func (s *OrderService) CreateOrder(userID int, items []Item) error {
 ## Custom Validation
 
 ```go
-import "github.com/Yoochan45/go-api-utils/pkg-echo/validator"
+import "github.com/yoockh/go-api-utils/pkg-echo/validator"
 
 func validateUser(user *User) error {
     if !validator.IsValidEmail(user.Email) {
@@ -395,4 +395,4 @@ go get golang.org/x/crypto
 ---
 
 **License:** MIT  
-**Author:** Aisiya Qutwatunnada (@Yoochan45)
+**Author:** Aisiya Qutwatunnada (@yoockh)

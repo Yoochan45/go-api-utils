@@ -3,9 +3,9 @@ package middleware
 import (
 	"strings"
 
-	"github.com/Yoochan45/go-api-utils/pkg-echo/auth"
-	"github.com/Yoochan45/go-api-utils/pkg-echo/response"
 	"github.com/labstack/echo/v4"
+	"github.com/yoockh/go-api-utils/pkg-echo/auth"
+	"github.com/yoockh/go-api-utils/pkg-echo/response"
 )
 
 // JWTConfig configures JWT middleware behavior.
