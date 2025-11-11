@@ -4,8 +4,8 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/Yoochan45/go-api-utils/pkg/middleware"
-	"github.com/Yoochan45/go-api-utils/pkg/response"
+	"github.com/yoockh/go-api-utils/pkg/middleware"
+	"github.com/yoockh/go-api-utils/pkg/response"
 )
 
 func main() {

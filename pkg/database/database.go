@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Yoochan45/go-api-utils/pkg/config"
 	_ "github.com/lib/pq"
+	"github.com/yoockh/go-api-utils/pkg/config"
 )
 
 // PostgresConfig holds database connection configuration

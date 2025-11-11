@@ -3,8 +3,8 @@ package middleware
 import (
 	"strconv"
 
-	"github.com/Yoochan45/go-api-utils/pkg-echo/request"
 	"github.com/labstack/echo/v4"
+	"github.com/yoockh/go-api-utils/pkg-echo/request"
 )
 
 // CurrentUserID returns user ID from context (custom token or basic claims), 0 if not found.

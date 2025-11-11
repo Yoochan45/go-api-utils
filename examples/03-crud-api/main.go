@@ -5,12 +5,12 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/Yoochan45/go-api-utils/pkg/config"
-	"github.com/Yoochan45/go-api-utils/pkg/database"
-	"github.com/Yoochan45/go-api-utils/pkg/middleware"
-	"github.com/Yoochan45/go-api-utils/pkg/repository"
-	"github.com/Yoochan45/go-api-utils/pkg/request"
-	"github.com/Yoochan45/go-api-utils/pkg/response"
+	"github.com/yoockh/go-api-utils/pkg/config"
+	"github.com/yoockh/go-api-utils/pkg/database"
+	"github.com/yoockh/go-api-utils/pkg/middleware"
+	"github.com/yoockh/go-api-utils/pkg/repository"
+	"github.com/yoockh/go-api-utils/pkg/request"
+	"github.com/yoockh/go-api-utils/pkg/response"
 )
 
 // Product model

@@ -5,9 +5,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Yoochan45/go-api-utils/pkg-echo/response"
-	"github.com/Yoochan45/go-api-utils/pkg-echo/validator"
 	"github.com/labstack/echo/v4"
+	"github.com/yoockh/go-api-utils/pkg-echo/response"
+	"github.com/yoockh/go-api-utils/pkg-echo/validator"
 )
 
 // BindAndValidate binds request body and validates required fields.

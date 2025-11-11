@@ -3,8 +3,8 @@ package main
 import (
 	"log"
 
-	"github.com/Yoochan45/go-api-utils/pkg/config"
-	"github.com/Yoochan45/go-api-utils/pkg/database"
+	"github.com/yoockh/go-api-utils/pkg/config"
+	"github.com/yoockh/go-api-utils/pkg/database"
 )
 
 func main() {
