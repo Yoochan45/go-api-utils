@@ -27,7 +27,7 @@ A lightweight utility library for building REST APIs in Go, supporting both stan
 ## Installation
 
 ```bash
-go get github.com/Yoochan45/go-api-utils
+go get github.com/yoockh/go-api-utils
 ```
 
 ## Environment Variables
@@ -61,9 +61,9 @@ package main
 
 import (
     "net/http"
-    "github.com/Yoochan45/go-api-utils/pkg/database"
-    "github.com/Yoochan45/go-api-utils/pkg/middleware"
-    "github.com/Yoochan45/go-api-utils/pkg/response"
+    "github.com/yoockh/go-api-utils/pkg/database"
+    "github.com/yoockh/go-api-utils/pkg/middleware"
+    "github.com/yoockh/go-api-utils/pkg/response"
 )
 
 type Product struct {
@@ -106,12 +106,12 @@ package main
 
 import (
     "time"
-    "github.com/Yoochan45/go-api-utils/pkg/config"
-    "github.com/Yoochan45/go-api-utils/pkg-echo/auth"
-    echomw "github.com/Yoochan45/go-api-utils/pkg-echo/middleware"
-    "github.com/Yoochan45/go-api-utils/pkg-echo/orm"
-    "github.com/Yoochan45/go-api-utils/pkg-echo/request"
-    "github.com/Yoochan45/go-api-utils/pkg-echo/response"
+    "github.com/yoockh/go-api-utils/pkg/config"
+    "github.com/yoockh/go-api-utils/pkg-echo/auth"
+    echomw "github.com/yoockh/go-api-utils/pkg-echo/middleware"
+    "github.com/yoockh/go-api-utils/pkg-echo/orm"
+    "github.com/yoockh/go-api-utils/pkg-echo/request"
+    "github.com/yoockh/go-api-utils/pkg-echo/response"
     "github.com/labstack/echo/v4"
 )
 
@@ -618,7 +618,7 @@ MIT
 
 ## Author
 
-Aisiya Qutwatunnada — GitHub: @Yoochan45
+Aisiya Qutwatunnada — GitHub: @yoockh
 
 ## Changelog
 
