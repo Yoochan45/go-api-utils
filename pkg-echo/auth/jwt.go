@@ -46,7 +46,7 @@ func GenerateToken(userID int, email, role, secretKey string, expiry time.Durati
 	return token.SignedString([]byte(secretKey))
 }
 
-// GenerateCustomToken creates JWT token with flexible data
+// GenerateCustomToken creates JWT token with flexible data.
 // Use this when you need to include custom fields (first_name, last_name, etc)
 // Example:
 //
